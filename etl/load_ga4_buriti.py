@@ -41,7 +41,7 @@ _OVERVIEW_METRICS = [
 ]
 _UTM_DIM = [
     "date", "landingPage",
-    "sessionSource", "sessionMedium", "sessionCampaign", "sessionManualAdContent",
+    "sessionSource", "sessionMedium", "sessionCampaignName", "sessionManualAdContent",
 ]
 _UTM_METRICS = ["sessions", "totalUsers", "engagedSessions", "screenPageViews"]
 

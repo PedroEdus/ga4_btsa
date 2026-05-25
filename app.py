@@ -150,8 +150,8 @@ with aba_utm:
 
         with col3:
             by_campaign = (
-                utm.groupby("sessionCampaign", as_index=False)["sessions"].sum()
-                .rename(columns={"sessionCampaign": "campaign"})
+                utm.groupby("sessionCampaignName", as_index=False)["sessions"].sum()
+                .rename(columns={"sessionCampaignName": "campaign"})
             )
             grafico_barras_h(by_campaign, x="sessions", y="campaign", titulo="Sessões por Campaign (utm_campaign)", top_n=15)
 
@@ -205,14 +205,14 @@ with aba_lp:
                 grafico_rosca(med, names="sessionMedium", values="sessions", titulo="Medium")
 
             camp = (
-                utm_lp.groupby("sessionCampaign", as_index=False)["sessions"]
+                utm_lp.groupby("sessionCampaignName", as_index=False)["sessions"]
                 .sum()
                 .assign(
-                    totalUsers=utm_lp.groupby("sessionCampaign")["totalUsers"].sum().values,
-                    engagedSessions=utm_lp.groupby("sessionCampaign")["engagedSessions"].sum().values,
+                    totalUsers=utm_lp.groupby("sessionCampaignName")["totalUsers"].sum().values,
+                    engagedSessions=utm_lp.groupby("sessionCampaignName")["engagedSessions"].sum().values,
                 )
             )
-            grafico_barras_h(camp, x="sessions", y="sessionCampaign", titulo="Sessões por Campaign nesta LP", top_n=15)
+            grafico_barras_h(camp, x="sessions", y="sessionCampaignName", titulo="Sessões por Campaign nesta LP", top_n=15)
 
 
 # ════════════════════════════════════════════════════════════════════════════

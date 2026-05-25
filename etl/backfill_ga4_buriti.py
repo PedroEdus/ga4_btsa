@@ -36,7 +36,7 @@ CONFIGS = {
         "default_dir": os.path.join(os.path.dirname(__file__), "..", "ga4_checkpoints_utm"),
         "cols": [
             "property_id", "property_name", "date", "landingPage",
-            "sessionSource", "sessionMedium", "sessionCampaign", "sessionManualAdContent",
+            "sessionSource", "sessionMedium", "sessionCampaignName", "sessionManualAdContent",
             "sessions", "totalUsers", "engagedSessions", "screenPageViews",
         ],
     },

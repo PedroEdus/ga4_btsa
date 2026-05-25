@@ -64,7 +64,7 @@ def carregar_utm() -> pd.DataFrame:
                    ROW_NUMBER() OVER (
                        PARTITION BY property_id, date, landingPage,
                                     sessionSource, sessionMedium,
-                                    sessionCampaign, sessionManualAdContent
+                                    sessionCampaignName, sessionManualAdContent
                        ORDER BY _loaded_at DESC
                    ) AS rn
             FROM `{PROJECT_ID}.{DATASET}.ga4_utm_raw`
