@@ -24,8 +24,9 @@ from google.auth.transport.requests import Request
 
 load_dotenv()
 
-TOKEN_PATH      = os.getenv("GA4_TOKEN_PATH", "../token.pkl")
-CHECKPOINT_DIR  = os.getenv("UTM_CHECKPOINT_DIR", "ga4_checkpoints_utm")
+_SCRIPT_DIR     = os.path.dirname(os.path.abspath(__file__))
+TOKEN_PATH      = os.getenv("GA4_TOKEN_PATH", os.path.join(_SCRIPT_DIR, "..", "..", "token.pkl"))
+CHECKPOINT_DIR  = os.getenv("UTM_CHECKPOINT_DIR", os.path.join(_SCRIPT_DIR, "..", "..", "ga4_checkpoints_utm"))
 MAX_WORKERS     = 3   # UTM retorna muito mais linhas — workers menores evitam 429
 
 UTM_DIMENSIONS = [

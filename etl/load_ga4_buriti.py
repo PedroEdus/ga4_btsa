@@ -30,7 +30,8 @@ TABLE_OVERVIEW = f"{PROJECT_ID}.{DATASET_RAW}.ga4_overview_raw"
 TABLE_UTM      = f"{PROJECT_ID}.{DATASET_RAW}.ga4_utm_raw"
 TABLE_AUDIT    = f"{PROJECT_ID}.{DATASET_SILV}.controle_cargas_ga4_buriti"
 
-TOKEN_PATH   = os.getenv("GA4_TOKEN_PATH", "token.pkl")
+_SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+TOKEN_PATH   = os.getenv("GA4_TOKEN_PATH", os.path.join(_SCRIPT_DIR, "..", "..", "token.pkl"))
 MAX_WORKERS  = 5
 
 _OVERVIEW_DIM     = ["date"]
