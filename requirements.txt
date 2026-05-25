@@ -1,0 +1,10 @@
+google-cloud-bigquery
+google-analytics-data
+google-analytics-admin
+google-auth
+google-auth-oauthlib
+pandas
+streamlit
+plotly
+python-dotenv
+pyarrow

@@ -1,0 +1,9 @@
+.env
+keys/
+*.json
+*.pkl
+__pycache__/
+.DS_Store
+*.pyc
+ga4_out/
+ga4_checkpoints/
