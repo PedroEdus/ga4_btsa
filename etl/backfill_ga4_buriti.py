@@ -24,7 +24,7 @@ DATASET_RAW = "buriti_marketing_raw"
 CONFIGS = {
     "overview": {
         "table":   f"{PROJECT_ID}.{DATASET_RAW}.ga4_overview_raw",
-        "default_dir": os.path.join(os.path.dirname(__file__), "..", "..", "ga4_checkpoints"),
+        "default_dir": r"C:\Users\pedro.moura\Documents\Ext GA4\ga4_checkpoints",
         "cols": [
             "property_id", "property_name", "date",
             "sessions", "totalUsers", "newUsers", "engagedSessions",
@@ -33,7 +33,7 @@ CONFIGS = {
     },
     "utm": {
         "table":   f"{PROJECT_ID}.{DATASET_RAW}.ga4_utm_raw",
-        "default_dir": os.path.join(os.path.dirname(__file__), "..", "ga4_checkpoints_utm"),
+        "default_dir": r"C:\Users\pedro.moura\Documents\Ext GA4\ga4_checkpoints_utm",
         "cols": [
             "property_id", "property_name", "date", "landingPage",
             "sessionSource", "sessionMedium", "sessionCampaignName", "sessionManualAdContent",

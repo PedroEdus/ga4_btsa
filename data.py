@@ -1,7 +1,10 @@
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
 from google.cloud import bigquery
 from google.oauth2 import service_account
+
+load_dotenv()
 
 PROJECT_ID = "buriti-marketing-analytics"
 DATASET    = "buriti_marketing_raw"
@@ -14,11 +17,14 @@ _NUMERIC_UTM = ["sessions", "totalUsers", "engagedSessions", "screenPageViews"]
 
 
 def _criar_client() -> bigquery.Client:
-    if "gcp_service_account" in st.secrets:
-        creds = service_account.Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"]
-        )
-        return bigquery.Client(credentials=creds, project=PROJECT_ID)
+    try:
+        if "gcp_service_account" in st.secrets:
+            creds = service_account.Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"]
+            )
+            return bigquery.Client(credentials=creds, project=PROJECT_ID)
+    except Exception:
+        pass  # sem secrets.toml — usa GOOGLE_APPLICATION_CREDENTIALS local
     return bigquery.Client(project=PROJECT_ID)
 
 

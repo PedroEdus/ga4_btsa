@@ -9,11 +9,112 @@ _ASSETS     = os.path.join(os.path.dirname(__file__), "assets")
 LOGO_CLARA  = os.path.join(_ASSETS, "logo_preta.png")
 LOGO_ESCURA = os.path.join(_ASSETS, "logo_branca.png")
 
+# ── Classificação de canal ────────────────────────────────────────────────────
 
-def _imagem_base64(caminho: str) -> str:
-    with open(caminho, "rb") as f:
-        return base64.b64encode(f.read()).decode()
+CANAL_COLORS = {
+    "Orgânico":   "#008140",
+    "Pago":       "#004d26",
+    "Direto":     "#888888",
+    "Social":     "#33aa77",
+    "Referência": "#00b359",
+    "Outros":     "#444444",
+}
 
+_PAID_MEDIUMS   = {"cpc","cpm","paid","lead_ad","native_ad","link_ad",
+                   "banner_300x250","reconhecimento","formulario","story","lamina"}
+_SOCIAL_MEDIUMS = {"whatsapp","instagram_buriti","social","instagram"}
+_SOCIAL_SOURCES = {"linktree","l.wl.co","facebook.com","instagram.com"}
+
+
+def classificar_canal(medium: str, source: str) -> str:
+    m = str(medium).lower().strip()
+    s = str(source).lower().strip()
+    if m == "organic":
+        return "Orgânico"
+    if s == "(direct)" and m in {"(none)", "", "(not set)"}:
+        return "Direto"
+    if m in _PAID_MEDIUMS:
+        return "Pago"
+    if m in _SOCIAL_MEDIUMS or s in _SOCIAL_SOURCES:
+        return "Social"
+    if m == "referral":
+        return "Referência"
+    return "Outros"
+
+
+# ── CSS compartilhado (design system meta_ads) ────────────────────────────────
+
+_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+.pub-card {
+    background: #1c1c1c;
+    border-radius: 8px;
+    padding: 18px 20px 14px;
+    margin-bottom: 4px;
+}
+.pub-card-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 16px;
+}
+.pub-bar-list { display: flex; flex-direction: column; gap: 9px; }
+.pub-bar-row {
+    display: grid;
+    grid-template-columns: minmax(0, 38%) 1fr 58px;
+    align-items: center;
+    gap: 8px;
+}
+.pub-bar-name {
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+.pub-bar-track {
+    height: 16px;
+    background: #262626;
+    border-radius: 3px;
+    overflow: hidden;
+}
+.pub-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+}
+.pub-bar-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: rgba(255,255,255,0.72);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+</style>
+"""
+
+
+def _html(content: str) -> None:
+    if hasattr(st, "html"):
+        st.html(_CSS + content)
+    else:
+        st.markdown(_CSS + content, unsafe_allow_html=True)
+
+
+def _tema() -> str:
+    return "plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white"
+
+
+def _br(valor, decimais: int = 0, prefixo: str = "") -> str:
+    fmt = f"{float(valor):,.{decimais}f}"
+    fmt = fmt.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{prefixo}{fmt}"
+
+
+# ── Logo ──────────────────────────────────────────────────────────────────────
 
 def exibir_logo() -> None:
     existe_clara  = os.path.exists(LOGO_CLARA)
@@ -22,31 +123,23 @@ def exibir_logo() -> None:
         return
     caminho_claro  = LOGO_CLARA  if existe_clara  else LOGO_ESCURA
     caminho_escuro = LOGO_ESCURA if existe_escura else LOGO_CLARA
-    clara_b64  = _imagem_base64(caminho_claro)
-    escura_b64 = _imagem_base64(caminho_escuro)
-    st.markdown(
-        f"""
+    def b64(p):
+        with open(p, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    st.markdown(f"""
         <style>
-            .logo-container {{ display:flex; justify-content:flex-start; margin-bottom:0.75rem; }}
-            .logo-container img {{ width:min(260px,60vw); height:auto; }}
-            .logo-dark {{ display:none; }}
-            @media (prefers-color-scheme:dark) {{
-                .logo-light {{ display:none; }}
-                .logo-dark  {{ display:block; }}
-            }}
+            .logo-container{{display:flex;justify-content:flex-start;margin-bottom:0.75rem;}}
+            .logo-container img{{width:min(220px,55vw);height:auto;}}
+            .logo-dark{{display:none;}}
+            @media(prefers-color-scheme:dark){{.logo-light{{display:none;}}.logo-dark{{display:block;}}}}
         </style>
         <div class="logo-container">
-            <img class="logo-light" src="data:image/png;base64,{clara_b64}">
-            <img class="logo-dark"  src="data:image/png;base64,{escura_b64}">
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            <img class="logo-light" src="data:image/png;base64,{b64(caminho_claro)}">
+            <img class="logo-dark"  src="data:image/png;base64,{b64(caminho_escuro)}">
+        </div>""", unsafe_allow_html=True)
 
 
-def _tema() -> str:
-    return "plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white"
-
+# ── KPIs ──────────────────────────────────────────────────────────────────────
 
 def kpis(metricas: dict) -> None:
     cols = st.columns(len(metricas))
@@ -54,56 +147,105 @@ def kpis(metricas: dict) -> None:
         col.metric(label, valor)
 
 
-def grafico_linha(
-    df: pd.DataFrame, x: str, y: str, color: str | None, titulo: str
-) -> None:
-    fig = px.line(df, x=x, y=y, color=color, title=titulo, markers=True)
-    fig.update_layout(
-        height=400,
-        template=_tema(),
-        margin=dict(l=20, r=20, t=60, b=20),
-        legend=dict(orientation="h", y=-0.2),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+# ── Gráfico de barras mensais (plotly) ───────────────────────────────────────
 
-
-def grafico_barras_h(
+def grafico_barras_mensais(
     df: pd.DataFrame,
     x: str,
     y: str,
     titulo: str,
     color: str | None = None,
     color_map: dict | None = None,
-    top_n: int = 20,
 ) -> None:
-    df = df.nlargest(top_n, x) if top_n else df
-    fig = px.bar(
-        df.sort_values(x, ascending=True),
-        x=x,
-        y=y,
-        color=color,
-        orientation="h",
-        title=titulo,
-        color_discrete_map=color_map,
-    )
-    fig.update_traces(texttemplate="%{x:,.0f}", textposition="outside", cliponaxis=False)
+    df = df.copy()
+    # Converte coluna datetime → string "Mmm/AAAA" ordenada (evita eixo duplicado)
+    if pd.api.types.is_datetime64_any_dtype(df[x]):
+        df = df.sort_values(x)
+        df[x] = df[x].dt.strftime("%b/%Y")
+
+    kwargs = dict(x=x, y=y, title=titulo, barmode="stack" if color else "relative")
+    if color:
+        kwargs["color"] = color
+    if color_map:
+        kwargs["color_discrete_map"] = color_map
+    fig = px.bar(df, **kwargs)
     fig.update_layout(
-        height=max(420, len(df) * 32),
         template=_tema(),
-        margin=dict(l=20, r=80, t=60, b=20),
-        yaxis={"categoryorder": "total ascending"},
+        height=360,
+        margin=dict(l=20, r=20, t=50, b=20),
+        xaxis=dict(title=None, type="category"),
+        yaxis=dict(title=None),
+        legend=dict(orientation="h", y=-0.25, title=None),
+        bargap=0.25,
     )
+    if not color:
+        fig.update_traces(marker_color="#008140")
     st.plotly_chart(fig, use_container_width=True)
 
+
+# ── Barra horizontal em pub-card ─────────────────────────────────────────────
+
+def grafico_barras_h_card(
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    titulo: str,
+    top_n: int = 15,
+    color: str = "#008140",
+) -> None:
+    df_top = df.nlargest(top_n, x_col).copy()
+    max_val = float(df_top[x_col].max()) or 1
+
+    rows_html = ""
+    for _, row in df_top.sort_values(x_col, ascending=False).iterrows():
+        val      = float(row[x_col])
+        name     = str(row[y_col])
+        bar_w    = val / max_val * 100
+        name_tr  = (name[:38] + "…") if len(name) > 38 else name
+        val_str  = _br(val)
+        rows_html += (
+            f'<div class="pub-bar-row">'
+            f'<div class="pub-bar-name" title="{name}">{name_tr}</div>'
+            f'<div class="pub-bar-track">'
+            f'<div class="pub-bar-fill" style="width:{bar_w:.2f}%;background:{color};"></div>'
+            f'</div>'
+            f'<div class="pub-bar-value">{val_str}</div>'
+            f'</div>'
+        )
+
+    _html(f"""
+        <div class="pub-card">
+            <div class="pub-card-title">{titulo}</div>
+            <div class="pub-bar-list">{rows_html}</div>
+        </div>
+    """)
+
+
+# ── Rosca (plotly) ────────────────────────────────────────────────────────────
 
 def grafico_rosca(
-    df: pd.DataFrame, names: str, values: str, titulo: str
+    df: pd.DataFrame,
+    names: str,
+    values: str,
+    titulo: str,
+    color_map: dict | None = None,
 ) -> None:
-    fig = px.pie(df, names=names, values=values, title=titulo, hole=0.4)
-    fig.update_traces(textinfo="label+percent+value")
-    fig.update_layout(height=420, template=_tema(), margin=dict(l=20, r=20, t=60, b=20))
+    kwargs = dict(names=names, values=values, title=titulo, hole=0.5)
+    if color_map:
+        kwargs["color"] = names
+        kwargs["color_discrete_map"] = color_map
+    fig = px.pie(df, **kwargs)
+    fig.update_traces(textinfo="label+percent", textfont_size=11)
+    fig.update_layout(
+        template=_tema(),
+        height=360,
+        margin=dict(l=20, r=20, t=50, b=20),
+        legend=dict(orientation="h", y=-0.2, title=None),
+    )
     st.plotly_chart(fig, use_container_width=True)
 
+
+# ── Tabela simples ────────────────────────────────────────────────────────────
 
 def tabela(df: pd.DataFrame) -> None:
     st.dataframe(df, hide_index=True, use_container_width=True)

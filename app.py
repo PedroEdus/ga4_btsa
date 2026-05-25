@@ -1,8 +1,18 @@
 import pandas as pd
 import streamlit as st
 
-from components import exibir_logo, grafico_barras_h, grafico_linha, grafico_rosca, kpis, tabela
+from components import (
+    CANAL_COLORS,
+    classificar_canal,
+    exibir_logo,
+    grafico_barras_h_card,
+    grafico_barras_mensais,
+    grafico_rosca,
+    kpis,
+    tabela,
+)
 from data import carregar_overview, carregar_utm
+from style import aplicar_tema
 
 st.set_page_config(
     page_title="GA4 Buriti — Analytics",
@@ -10,6 +20,7 @@ st.set_page_config(
     layout="wide",
 )
 
+aplicar_tema()
 exibir_logo()
 st.title("Google Analytics 4 — Buriti")
 
@@ -20,156 +31,210 @@ with st.spinner("Carregando dados..."):
     df_utm = carregar_utm()
 
 if df_ov.empty:
-    st.warning("Nenhum dado de overview encontrado.")
+    st.warning("Nenhum dado encontrado.")
     st.stop()
 
-# ── Sidebar: filtros ──────────────────────────────────────────────────────────
+# ── Separar institucionais ────────────────────────────────────────────────────
+# Contas do site institucional — não comparar com empreendimentos
 
-st.sidebar.header("Filtros")
+_INST_KEYWORDS = ["institucional", "btsa | site"]
 
-# Extrai nome curto do empreendimento (parte após "—")
+def _is_inst(name: str) -> bool:
+    n = str(name).lower()
+    short = n.split("—")[-1].strip()
+    return any(k in n for k in _INST_KEYWORDS) or short == "buriti empreendimentos"
+
 def _nome_curto(full: str) -> str:
     return full.split("—")[-1].strip() if "—" in str(full) else str(full)
 
-nomes = sorted(df_ov["property_name"].dropna().unique())
+mask_ov  = df_ov["property_name"].apply(_is_inst)
+mask_utm = df_utm["property_name"].apply(_is_inst) if not df_utm.empty else pd.Series(dtype=bool)
+
+df_ov_inst  = df_ov[mask_ov].copy()
+df_ov_emp   = df_ov[~mask_ov].copy()
+df_utm_inst = df_utm[mask_utm].copy()  if not df_utm.empty else pd.DataFrame()
+df_utm_emp  = df_utm[~mask_utm].copy() if not df_utm.empty else pd.DataFrame()
+
+# ── Classificar canais UTM ────────────────────────────────────────────────────
+
+def _enriquecer_utm(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    df = df.copy()
+    df["canal"] = df.apply(
+        lambda r: classificar_canal(
+            r.get("sessionMedium", ""), r.get("sessionSource", "")
+        ), axis=1
+    )
+    df["month"] = df["date"].dt.to_period("M").dt.to_timestamp()
+    return df
+
+df_utm_emp  = _enriquecer_utm(df_utm_emp)
+df_utm_inst = _enriquecer_utm(df_utm_inst)
+
+# ── Sidebar — filtros (apenas empreendimentos) ────────────────────────────────
+
+st.sidebar.header("Filtros")
+
+nomes        = sorted(df_ov_emp["property_name"].dropna().unique())
 nomes_curtos = {n: _nome_curto(n) for n in nomes}
-opcoes = ["Todos"] + [nomes_curtos[n] for n in nomes]
+opcoes       = ["Todos"] + [nomes_curtos[n] for n in nomes]
+sel_nome     = st.sidebar.selectbox("Empreendimento", opcoes)
 
-sel_nome = st.sidebar.selectbox("Empreendimento", opcoes)
-
-min_date = df_ov["date"].min()
-max_date = df_ov["date"].max()
+min_date = df_ov_emp["date"].min()
+max_date = df_ov_emp["date"].max()
 date_range = st.sidebar.date_input(
     "Período",
-    value=(max_date - pd.Timedelta(days=30), max_date),
+    value=(max_date - pd.Timedelta(days=90), max_date),
     min_value=min_date,
     max_value=max_date,
 )
-
-if len(date_range) == 2:
-    dt_ini, dt_fim = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
-else:
-    dt_ini = dt_fim = pd.Timestamp(date_range[0])
+dt_ini, dt_fim = (
+    (pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1]))
+    if len(date_range) == 2
+    else (pd.Timestamp(date_range[0]), pd.Timestamp(date_range[0]))
+)
 
 # ── Aplicar filtros ───────────────────────────────────────────────────────────
 
-ov = df_ov[(df_ov["date"] >= dt_ini) & (df_ov["date"] <= dt_fim)].copy()
+ov = df_ov_emp[(df_ov_emp["date"] >= dt_ini) & (df_ov_emp["date"] <= dt_fim)].copy()
 if sel_nome != "Todos":
     full_name = next((k for k, v in nomes_curtos.items() if v == sel_nome), None)
-    ov = ov[ov["property_name"] == full_name]
+    if full_name:
+        ov = ov[ov["property_name"] == full_name]
+else:
+    full_name = None
 
-utm = df_utm[(df_utm["date"] >= dt_ini) & (df_utm["date"] <= dt_fim)].copy()
-if sel_nome != "Todos" and full_name:
+utm = (
+    df_utm_emp[(df_utm_emp["date"] >= dt_ini) & (df_utm_emp["date"] <= dt_fim)].copy()
+    if not df_utm_emp.empty else pd.DataFrame()
+)
+if full_name and not utm.empty:
     utm = utm[utm["property_name"] == full_name]
 
 # ── Abas ──────────────────────────────────────────────────────────────────────
 
-aba_ov, aba_utm, aba_lp, aba_tabela = st.tabs([
+aba_inst, aba_ov, aba_utm, aba_lp, aba_tab = st.tabs([
+    "🏛️ Sites Institucionais",
     "📈 Overview",
     "🔗 UTM — Canais",
     "🏠 Landing Pages",
-    "📋 Tabela Bruta",
+    "📋 Tabela",
 ])
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# ABA 1 — Overview
+# ABA 1 — Overview (empreendimentos)
 # ════════════════════════════════════════════════════════════════════════════
 with aba_ov:
     if ov.empty:
         st.info("Nenhum dado no período selecionado.")
     else:
-        total_sessions = int(ov["sessions"].sum())
-        total_users    = int(ov["totalUsers"].sum())
-        avg_bounce     = ov["bounceRate"].mean()
-        avg_engage     = ov["engagementRate"].mean()
-        avg_duration   = ov["averageSessionDuration"].mean()
-
         kpis({
-            "Sessões":            f"{total_sessions:,.0f}",
-            "Usuários":           f"{total_users:,.0f}",
-            "Taxa de Rejeição":   f"{avg_bounce:.1%}",
-            "Taxa de Engaj.":     f"{avg_engage:.1%}",
-            "Duração Média (s)":  f"{avg_duration:.0f}s",
+            "Sessões":           f"{int(ov['sessions'].sum()):,.0f}",
+            "Usuários":          f"{int(ov['totalUsers'].sum()):,.0f}",
+            "Taxa de Rejeição":  f"{ov['bounceRate'].mean():.1%}",
+            "Taxa de Engaj.":    f"{ov['engagementRate'].mean():.1%}",
+            "Duração Média":     f"{ov['averageSessionDuration'].mean():.0f}s",
         })
-
         st.divider()
+
+        ov_m = ov.copy()
+        ov_m["month"] = ov_m["date"].dt.to_period("M").dt.to_timestamp()
+
         col1, col2 = st.columns(2)
-
         with col1:
-            # Série temporal: sessões diárias
-            ts = ov.groupby("date", as_index=False)["sessions"].sum()
-            grafico_linha(ts, x="date", y="sessions", color=None, titulo="Sessões por dia")
-
+            monthly = ov_m.groupby("month", as_index=False)["sessions"].sum()
+            grafico_barras_mensais(monthly, "month", "sessions", "Sessões por mês")
         with col2:
-            # Top properties por sessões
-            top = (
-                ov.groupby("property_name", as_index=False)["sessions"]
-                .sum()
+            top_emp = (
+                ov.groupby("property_name", as_index=False)["sessions"].sum()
                 .assign(nome=lambda d: d["property_name"].map(_nome_curto))
             )
-            grafico_barras_h(top, x="sessions", y="nome", titulo="Top Empreendimentos — Sessões", top_n=15)
+            grafico_barras_h_card(top_emp, "sessions", "nome", "Top Empreendimentos — Sessões")
 
         st.divider()
         col3, col4 = st.columns(2)
-
         with col3:
-            ts_users = ov.groupby("date", as_index=False)["totalUsers"].sum()
-            grafico_linha(ts_users, x="date", y="totalUsers", color=None, titulo="Usuários por dia")
-
+            monthly_u = ov_m.groupby("month", as_index=False)["totalUsers"].sum()
+            grafico_barras_mensais(monthly_u, "month", "totalUsers", "Usuários por mês")
         with col4:
-            ts_pages = ov.groupby("date", as_index=False)["screenPageViews"].sum()
-            grafico_linha(ts_pages, x="date", y="screenPageViews", color=None, titulo="Pageviews por dia")
+            monthly_pv = ov_m.groupby("month", as_index=False)["screenPageViews"].sum()
+            grafico_barras_mensais(monthly_pv, "month", "screenPageViews", "Pageviews por mês")
 
 
 # ════════════════════════════════════════════════════════════════════════════
 # ABA 2 — UTM: Canais
 # ════════════════════════════════════════════════════════════════════════════
+
+_RUIDO = {"(not set)", "(none)", "(data not available)", "data not available",
+          "not set", "", "nan"}
+
+def _limpo(v: str) -> bool:
+    return str(v).strip().lower() not in _RUIDO
+
 with aba_utm:
     if utm.empty:
         st.info("Nenhum dado de UTM no período selecionado.")
     else:
+        # ── Filtros rápidos ──────────────────────────────────────────────
+        cf1, cf2 = st.columns(2)
+        with cf1:
+            canal_opts = ["Todos"] + sorted(utm["canal"].dropna().unique().tolist())
+            sel_canal = st.selectbox("Canal", canal_opts, key="utm_canal")
+        with cf2:
+            src_med_vals = sorted({
+                f"{r['sessionSource']} / {r['sessionMedium']}"
+                for _, r in utm.iterrows()
+                if _limpo(r["sessionSource"]) and _limpo(r["sessionMedium"])
+            })
+            sel_src_med = st.selectbox("Source / Medium", ["Todos"] + src_med_vals, key="utm_src_med")
+
+        utm_f = utm.copy()
+        if sel_canal != "Todos":
+            utm_f = utm_f[utm_f["canal"] == sel_canal]
+        if sel_src_med != "Todos":
+            s, m = sel_src_med.split(" / ", 1)
+            utm_f = utm_f[(utm_f["sessionSource"] == s) & (utm_f["sessionMedium"] == m)]
+
+        st.divider()
         col1, col2 = st.columns(2)
-
         with col1:
-            by_source = (
-                utm.groupby("sessionSource", as_index=False)["sessions"].sum()
-                .rename(columns={"sessionSource": "source"})
-            )
-            grafico_barras_h(by_source, x="sessions", y="source", titulo="Sessões por Source (utm_source)", top_n=15)
-
+            canal_df = utm_f.groupby("canal", as_index=False)["sessions"].sum()
+            grafico_barras_h_card(canal_df, "sessions", "canal", "Distribuição por Canal")
         with col2:
-            by_medium = (
-                utm.groupby("sessionMedium", as_index=False)["sessions"].sum()
-                .rename(columns={"sessionMedium": "medium"})
+            monthly_canal = utm_f.groupby(["month", "canal"], as_index=False)["sessions"].sum()
+            grafico_barras_mensais(
+                monthly_canal, "month", "sessions",
+                "Sessões por mês — por canal",
+                color="canal", color_map=CANAL_COLORS,
             )
-            grafico_barras_h(by_medium, x="sessions", y="medium", titulo="Sessões por Medium (utm_medium)", top_n=15)
 
         st.divider()
         col3, col4 = st.columns(2)
-
         with col3:
-            by_campaign = (
-                utm.groupby("sessionCampaignName", as_index=False)["sessions"].sum()
-                .rename(columns={"sessionCampaignName": "campaign"})
-            )
-            grafico_barras_h(by_campaign, x="sessions", y="campaign", titulo="Sessões por Campaign (utm_campaign)", top_n=15)
-
+            src = utm_f.groupby("sessionSource", as_index=False)["sessions"].sum()
+            grafico_barras_h_card(src, "sessions", "sessionSource", "Source (utm_source)")
         with col4:
-            by_content = (
-                utm.groupby("sessionManualAdContent", as_index=False)["sessions"].sum()
-                .rename(columns={"sessionManualAdContent": "content"})
-            )
-            grafico_barras_h(by_content, x="sessions", y="content", titulo="Sessões por Content (utm_content)", top_n=15)
+            med = utm_f.groupby("sessionMedium", as_index=False)["sessions"].sum()
+            grafico_barras_h_card(med, "sessions", "sessionMedium", "Medium (utm_medium)")
 
         st.divider()
-        st.subheader("Source × Medium (combinado)")
-        by_src_med = (
-            utm.groupby(["sessionSource", "sessionMedium"], as_index=False)["sessions"]
-            .sum()
-            .assign(canal=lambda d: d["sessionSource"] + " / " + d["sessionMedium"])
+        col5, col6 = st.columns(2)
+        with col5:
+            camp = utm_f.groupby("sessionCampaignName", as_index=False)["sessions"].sum()
+            grafico_barras_h_card(camp, "sessions", "sessionCampaignName", "Campaign (utm_campaign)")
+        with col6:
+            cont = utm_f.groupby("sessionManualAdContent", as_index=False)["sessions"].sum()
+            grafico_barras_h_card(cont, "sessions", "sessionManualAdContent", "Content (utm_content)")
+
+        st.divider()
+        st.subheader("Source × Medium")
+        src_med_df = (
+            utm_f.groupby(["sessionSource", "sessionMedium"], as_index=False)["sessions"].sum()
+            .assign(canal_label=lambda d: d["sessionSource"] + " / " + d["sessionMedium"])
         )
-        grafico_barras_h(by_src_med, x="sessions", y="canal", titulo="Top Canais (source / medium)", top_n=20)
+        grafico_barras_h_card(src_med_df, "sessions", "canal_label", "Top combinações source / medium", top_n=20)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -179,48 +244,92 @@ with aba_lp:
     if utm.empty:
         st.info("Nenhum dado de landing page no período selecionado.")
     else:
-        # Top landing pages
         top_lp = (
             utm.groupby("landingPage", as_index=False)["sessions"]
             .sum()
             .sort_values("sessions", ascending=False)
         )
-
-        # Filtro de landing page específica
-        lps_disponiveis = ["Todas"] + top_lp["landingPage"].head(50).tolist()
-        sel_lp = st.selectbox("Filtrar landing page", lps_disponiveis)
+        lps       = ["Todas"] + top_lp["landingPage"].head(50).tolist()
+        sel_lp    = st.selectbox("Filtrar landing page", lps)
 
         if sel_lp == "Todas":
-            grafico_barras_h(top_lp, x="sessions", y="landingPage", titulo="Sessões por Landing Page", top_n=20)
+            grafico_barras_h_card(top_lp, "sessions", "landingPage", "Sessões por Landing Page")
         else:
-            st.subheader(f"UTMs para: `{sel_lp}`")
             utm_lp = utm[utm["landingPage"] == sel_lp]
+            st.subheader(f"`{sel_lp}`")
 
             col1, col2 = st.columns(2)
             with col1:
-                src = utm_lp.groupby("sessionSource", as_index=False)["sessions"].sum()
-                grafico_rosca(src, names="sessionSource", values="sessions", titulo="Source")
+                canal_lp = utm_lp.groupby("canal", as_index=False)["sessions"].sum()
+                grafico_barras_h_card(canal_lp, "sessions", "canal", "Canal")
             with col2:
-                med = utm_lp.groupby("sessionMedium", as_index=False)["sessions"].sum()
-                grafico_rosca(med, names="sessionMedium", values="sessions", titulo="Medium")
+                src_lp = utm_lp.groupby("sessionSource", as_index=False)["sessions"].sum()
+                grafico_rosca(src_lp, "sessionSource", "sessions", "Source")
 
-            camp = (
-                utm_lp.groupby("sessionCampaignName", as_index=False)["sessions"]
-                .sum()
-                .assign(
-                    totalUsers=utm_lp.groupby("sessionCampaignName")["totalUsers"].sum().values,
-                    engagedSessions=utm_lp.groupby("sessionCampaignName")["engagedSessions"].sum().values,
-                )
+            camp_lp = utm_lp.groupby("sessionCampaignName", as_index=False)["sessions"].sum()
+            grafico_barras_h_card(camp_lp, "sessions", "sessionCampaignName", "Campaigns nesta Landing Page")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ABA 4 — Sites Institucionais
+# ════════════════════════════════════════════════════════════════════════════
+with aba_inst:
+    ov_inst = df_ov_inst[
+        (df_ov_inst["date"] >= dt_ini) & (df_ov_inst["date"] <= dt_fim)
+    ].copy()
+    utm_inst = (
+        df_utm_inst[(df_utm_inst["date"] >= dt_ini) & (df_utm_inst["date"] <= dt_fim)].copy()
+        if not df_utm_inst.empty else pd.DataFrame()
+    )
+
+    st.caption("BURITI EMPREENDIMENTOS · Buriti Institucional – GA4 · BTSA | Site Institucional")
+
+    if ov_inst.empty:
+        st.info("Nenhum dado institucional no período.")
+    else:
+        kpis({
+            "Sessões":          f"{int(ov_inst['sessions'].sum()):,.0f}",
+            "Usuários":         f"{int(ov_inst['totalUsers'].sum()):,.0f}",
+            "Taxa de Rejeição": f"{ov_inst['bounceRate'].mean():.1%}",
+            "Taxa de Engaj.":   f"{ov_inst['engagementRate'].mean():.1%}",
+            "Duração Média":    f"{ov_inst['averageSessionDuration'].mean():.0f}s",
+        })
+        st.divider()
+
+        ov_inst_m = ov_inst.copy()
+        ov_inst_m["month"] = ov_inst_m["date"].dt.to_period("M").dt.to_timestamp()
+        ov_inst_m["nome"]  = ov_inst_m["property_name"].map(_nome_curto)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            monthly_inst = ov_inst_m.groupby(["month", "nome"], as_index=False)["sessions"].sum()
+            grafico_barras_mensais(
+                monthly_inst, "month", "sessions",
+                "Sessões por mês — por site",
+                color="nome",
             )
-            grafico_barras_h(camp, x="sessions", y="sessionCampaignName", titulo="Sessões por Campaign nesta LP", top_n=15)
+        with col2:
+            if not utm_inst.empty:
+                canal_inst = utm_inst.groupby("canal", as_index=False)["sessions"].sum()
+                grafico_barras_h_card(canal_inst, "sessions", "canal", "Distribuição por Canal")
+
+        if not utm_inst.empty:
+            st.divider()
+            col3, col4 = st.columns(2)
+            with col3:
+                src_inst = utm_inst.groupby("sessionSource", as_index=False)["sessions"].sum()
+                grafico_barras_h_card(src_inst, "sessions", "sessionSource", "Top Sources")
+            with col4:
+                camp_inst = utm_inst.groupby("sessionCampaignName", as_index=False)["sessions"].sum()
+                grafico_barras_h_card(camp_inst, "sessions", "sessionCampaignName", "Top Campaigns")
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# ABA 4 — Tabela Bruta
+# ABA 5 — Tabela Bruta
 # ════════════════════════════════════════════════════════════════════════════
-with aba_tabela:
+with aba_tab:
     sub = st.radio("Tabela", ["Overview", "UTM"], horizontal=True)
     if sub == "Overview":
         tabela(ov.sort_values("date", ascending=False))
     else:
-        tabela(utm.sort_values("date", ascending=False))
+        tabela(utm.sort_values("date", ascending=False) if not utm.empty else pd.DataFrame())
