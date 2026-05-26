@@ -117,7 +117,8 @@ _CSS = """
     font-size: 13px;
     color: #ffffff;
     border-bottom: 1px solid #1f1f1f;
-    max-width: 320px;
+    max-width: 200px;
+    min-width: 120px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -129,6 +130,17 @@ _CSS = """
     color: rgba(255,255,255,0.85);
     font-variant-numeric: tabular-nums;
 }
+.rs-td.txt {
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    color: rgba(255,255,255,0.65);
+    max-width: 160px;
+    min-width: 80px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rs-th.txt { text-align: left; }
 .rs-td.pct {
     text-align: right;
     font-family: 'JetBrains Mono', monospace;
@@ -349,7 +361,10 @@ def tabela_resumo(
 
     # Cabeçalho
     _nome_hdr = col_nome_label if col_nome_label is not None else col_nome
-    headers = _th(_nome_hdr, num=False) + "".join(_th(m["label"]) for m in metricas)
+    def _th_for(m):
+        is_num = m.get("cls", "num") not in ("txt", "text")
+        return _th(m["label"], num=is_num)
+    headers = _th(_nome_hdr, num=False) + "".join(_th_for(m) for m in metricas)
 
     # Linhas de dados
     rows_html = ""

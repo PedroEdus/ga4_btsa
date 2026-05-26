@@ -392,8 +392,8 @@ with aba_tab:
             st.info("Nenhum dado de UTM no período selecionado.")
         else:
             resumo_utm = (
-                _sub(_sub(_sub(utm, "canal"), "sessionSource"), "sessionMedium")
-                .groupby(["canal", "sessionSource", "sessionMedium"], as_index=False)
+                _sub(_sub(_sub(_sub(utm, "canal"), "sessionSource"), "sessionMedium"), "landingPage")
+                .groupby(["canal", "sessionSource", "sessionMedium", "landingPage"], as_index=False)
                 .agg(sessions=("sessions", "sum"))
                 .sort_values("sessions", ascending=False)
             )
@@ -408,6 +408,7 @@ with aba_tab:
                 col_nome="label",
                 col_nome_label="Canal · Source / Medium",
                 metricas=[
-                    {"col": "sessions", "label": "Sessões", "fmt": lambda v: _br(v), "agg": "sum"},
+                    {"col": "landingPage", "label": "Landing Page", "fmt": str, "agg": None, "cls": "txt"},
+                    {"col": "sessions",    "label": "Sessões",      "fmt": lambda v: _br(v), "agg": "sum"},
                 ],
             )
