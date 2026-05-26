@@ -93,6 +93,56 @@ _CSS = """
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
+/* ── Tabela de resumo ── */
+.rs-table { width:100%; border-collapse:collapse; font-family:'Manrope',sans-serif; }
+.rs-th {
+    padding: 9px 14px;
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.45);
+    border-bottom: 1px solid #2a2a2a;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.rs-th.num { text-align: right; }
+.rs-td {
+    padding: 9px 14px;
+    font-size: 13px;
+    color: #ffffff;
+    border-bottom: 1px solid #1f1f1f;
+}
+.rs-td-name {
+    padding: 9px 14px;
+    font-size: 13px;
+    color: #ffffff;
+    border-bottom: 1px solid #1f1f1f;
+    max-width: 320px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rs-td.num {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: rgba(255,255,255,0.85);
+    font-variant-numeric: tabular-nums;
+}
+.rs-td.pct {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: rgba(255,255,255,0.72);
+}
+tr.rs-total .rs-td {
+    font-weight: 700;
+    border-top: 1px solid #3a3a3a;
+    border-bottom: none;
+    color: #ffffff;
+}
+tr.rs-total .rs-td.num { color: #ffffff; }
+tr:last-child .rs-td { border-bottom: none; }
 </style>
 """
 
@@ -191,10 +241,12 @@ def grafico_barras_mensais(
         title=dict(font=dict(family="Manrope, sans-serif", size=15, color="#ffffff"), x=0, xanchor="left", pad=dict(l=4)),
     )
     if not color:
+        # Formata labels em padrão BR (1.234.567)
+        text_br = [_br(v) for v in df[y]]
         fig.update_traces(
             marker_color="#008140",
-            text=df[y],
-            texttemplate="%{text:,.0f}",
+            text=text_br,
+            texttemplate="%{text}",
             textposition="outside",
             textfont=dict(size=11, color="rgba(255,255,255,0.75)"),
             cliponaxis=False,
@@ -264,6 +316,74 @@ def grafico_rosca(
         title=dict(font=dict(family="Manrope, sans-serif", size=15, color="#ffffff"), x=0, xanchor="left", pad=dict(l=4)),
     )
     st.plotly_chart(fig, use_container_width=True)
+
+
+# ── Tabela de resumo agregada ─────────────────────────────────────────────────
+
+def tabela_resumo(
+    df: pd.DataFrame,
+    titulo: str,
+    col_nome: str,
+    metricas: list,
+    col_nome_label: str | None = None,
+) -> None:
+    """
+    Tabela de resumo estilizada com linha de TOTAL.
+
+    metricas: lista de dicts com chaves:
+        col     → nome da coluna no df
+        label   → texto do cabeçalho
+        fmt     → função de formatação (str)
+        agg     → "sum" | "mean" | None (não aparece no total)
+    """
+    import numpy as np
+
+    df_s = df.sort_values(metricas[0]["col"], ascending=False)
+
+    def _th(label, num=True):
+        cls = "rs-th num" if num else "rs-th"
+        return f'<th class="{cls}">{label}</th>'
+
+    def _td(val, cls="num"):
+        return f'<td class="rs-td {cls}">{val}</td>'
+
+    # Cabeçalho
+    _nome_hdr = col_nome_label if col_nome_label is not None else col_nome
+    headers = _th(_nome_hdr, num=False) + "".join(_th(m["label"]) for m in metricas)
+
+    # Linhas de dados
+    rows_html = ""
+    for _, row in df_s.iterrows():
+        cells = _td(str(row[col_nome]), cls="rs-td-name") + "".join(
+            _td(m["fmt"](row[m["col"]]), cls=m.get("cls", "num"))
+            for m in metricas
+        )
+        rows_html += f"<tr>{cells}</tr>"
+
+    # Linha de total
+    total_cells = _td("<strong>TOTAL</strong>", cls="rs-td-name")
+    for m in metricas:
+        agg = m.get("agg")
+        if agg == "sum":
+            val = df_s[m["col"]].sum()
+        elif agg == "mean":
+            val = df_s[m["col"]].mean()
+        else:
+            val = None
+        total_cells += _td(m["fmt"](val) if val is not None else "—", cls=m.get("cls", "num"))
+    rows_html += f'<tr class="rs-total">{total_cells}</tr>'
+
+    _html(f"""
+        <div class="pub-card">
+            <div class="pub-card-title">{titulo}</div>
+            <div style="overflow-x:auto">
+                <table class="rs-table">
+                    <thead><tr>{headers}</tr></thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+            </div>
+        </div>
+    """)
 
 
 # ── Tabela simples ────────────────────────────────────────────────────────────

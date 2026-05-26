@@ -3,6 +3,7 @@ import streamlit as st
 
 from components import (
     CANAL_COLORS,
+    _br,
     classificar_canal,
     exibir_logo,
     grafico_barras_h_card,
@@ -10,6 +11,7 @@ from components import (
     grafico_rosca,
     kpis,
     tabela,
+    tabela_resumo,
 )
 from data import carregar_overview, carregar_utm
 from style import aplicar_tema
@@ -121,6 +123,12 @@ def _sr(df: pd.DataFrame, col: str) -> pd.DataFrame:
     """Remove linhas com valor de ruído na coluna especificada."""
     return df[df[col].apply(_limpo)]
 
+def _sub(df: pd.DataFrame, col: str) -> pd.DataFrame:
+    """Substitui valores de ruído por 'Não informado' na coluna especificada."""
+    df = df.copy()
+    df[col] = df[col].apply(lambda v: "Não informado" if not _limpo(v) else v)
+    return df
+
 # ── Abas ──────────────────────────────────────────────────────────────────────
 
 aba_inst, aba_ov, aba_utm, aba_lp, aba_tab = st.tabs([
@@ -140,11 +148,11 @@ with aba_ov:
         st.info("Nenhum dado no período selecionado.")
     else:
         kpis({
-            "Sessões":           f"{int(ov['sessions'].sum()):,.0f}",
-            "Usuários":          f"{int(ov['totalUsers'].sum()):,.0f}",
-            "Taxa de Rejeição":  f"{ov['bounceRate'].mean():.1%}",
-            "Taxa de Engaj.":    f"{ov['engagementRate'].mean():.1%}",
-            "Duração Média":     f"{ov['averageSessionDuration'].mean():.0f}s",
+            "Sessões":           _br(ov['sessions'].sum()),
+            "Usuários":          _br(ov['totalUsers'].sum()),
+            "Taxa de Rejeição":  f"{ov['bounceRate'].mean():.1%}".replace(".", ","),
+            "Taxa de Engaj.":    f"{ov['engagementRate'].mean():.1%}".replace(".", ","),
+            "Duração Média":     f"{ov['averageSessionDuration'].mean():.0f}s".replace(".", ","),
         })
         st.divider()
 
@@ -170,6 +178,7 @@ with aba_ov:
         with col4:
             monthly_pv = ov_m.groupby("month", as_index=False)["screenPageViews"].sum()
             grafico_barras_mensais(monthly_pv, "month", "screenPageViews", "Pageviews por mês")
+
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -219,25 +228,25 @@ with aba_utm:
         st.divider()
         col3, col4 = st.columns(2)
         with col3:
-            src = _sr(utm_f, "sessionSource").groupby("sessionSource", as_index=False)["sessions"].sum()
+            src = _sub(utm_f, "sessionSource").groupby("sessionSource", as_index=False)["sessions"].sum()
             grafico_barras_h_card(src, "sessions", "sessionSource", "Source (utm_source)")
         with col4:
-            med = _sr(utm_f, "sessionMedium").groupby("sessionMedium", as_index=False)["sessions"].sum()
+            med = _sub(utm_f, "sessionMedium").groupby("sessionMedium", as_index=False)["sessions"].sum()
             grafico_barras_h_card(med, "sessions", "sessionMedium", "Medium (utm_medium)")
 
         st.divider()
         col5, col6 = st.columns(2)
         with col5:
-            camp = _sr(utm_f, "sessionCampaignName").groupby("sessionCampaignName", as_index=False)["sessions"].sum()
+            camp = _sub(utm_f, "sessionCampaignName").groupby("sessionCampaignName", as_index=False)["sessions"].sum()
             grafico_barras_h_card(camp, "sessions", "sessionCampaignName", "Campaign (utm_campaign)")
         with col6:
-            cont = _sr(utm_f, "sessionManualAdContent").groupby("sessionManualAdContent", as_index=False)["sessions"].sum()
+            cont = _sub(utm_f, "sessionManualAdContent").groupby("sessionManualAdContent", as_index=False)["sessions"].sum()
             grafico_barras_h_card(cont, "sessions", "sessionManualAdContent", "Content (utm_content)")
 
         st.divider()
         st.subheader("Source × Medium")
         src_med_df = (
-            _sr(_sr(utm_f, "sessionSource"), "sessionMedium")
+            _sub(_sub(utm_f, "sessionSource"), "sessionMedium")
             .groupby(["sessionSource", "sessionMedium"], as_index=False)["sessions"].sum()
             .assign(canal_label=lambda d: d["sessionSource"] + " / " + d["sessionMedium"])
         )
@@ -270,10 +279,10 @@ with aba_lp:
                 canal_lp = utm_lp.groupby("canal", as_index=False)["sessions"].sum()
                 grafico_barras_h_card(canal_lp, "sessions", "canal", "Canal")
             with col2:
-                src_lp = utm_lp.groupby("sessionSource", as_index=False)["sessions"].sum()
+                src_lp = _sub(utm_lp, "sessionSource").groupby("sessionSource", as_index=False)["sessions"].sum()
                 grafico_barras_h_card(src_lp, "sessions", "sessionSource", "Source")
 
-            camp_lp = utm_lp.groupby("sessionCampaignName", as_index=False)["sessions"].sum()
+            camp_lp = _sub(utm_lp, "sessionCampaignName").groupby("sessionCampaignName", as_index=False)["sessions"].sum()
             grafico_barras_h_card(camp_lp, "sessions", "sessionCampaignName", "Campaigns nesta Landing Page")
 
 
@@ -295,11 +304,11 @@ with aba_inst:
         st.info("Nenhum dado institucional no período.")
     else:
         kpis({
-            "Sessões":          f"{int(ov_inst['sessions'].sum()):,.0f}",
-            "Usuários":         f"{int(ov_inst['totalUsers'].sum()):,.0f}",
-            "Taxa de Rejeição": f"{ov_inst['bounceRate'].mean():.1%}",
-            "Taxa de Engaj.":   f"{ov_inst['engagementRate'].mean():.1%}",
-            "Duração Média":    f"{ov_inst['averageSessionDuration'].mean():.0f}s",
+            "Sessões":          _br(ov_inst['sessions'].sum()),
+            "Usuários":         _br(ov_inst['totalUsers'].sum()),
+            "Taxa de Rejeição": f"{ov_inst['bounceRate'].mean():.1%}".replace(".", ","),
+            "Taxa de Engaj.":   f"{ov_inst['engagementRate'].mean():.1%}".replace(".", ","),
+            "Duração Média":    f"{ov_inst['averageSessionDuration'].mean():.0f}s".replace(".", ","),
         })
         st.divider()
 
@@ -320,28 +329,85 @@ with aba_inst:
             st.divider()
             col3, col4 = st.columns(2)
             with col3:
-                src_inst = utm_inst.groupby("sessionSource", as_index=False)["sessions"].sum()
+                src_inst = _sub(utm_inst, "sessionSource").groupby("sessionSource", as_index=False)["sessions"].sum()
                 grafico_barras_h_card(src_inst, "sessions", "sessionSource", "Top Sources")
             with col4:
-                camp_inst = utm_inst.groupby("sessionCampaignName", as_index=False)["sessions"].sum()
+                camp_inst = _sub(utm_inst, "sessionCampaignName").groupby("sessionCampaignName", as_index=False)["sessions"].sum()
                 grafico_barras_h_card(camp_inst, "sessions", "sessionCampaignName", "Top Campaigns")
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# ABA 5 — Tabela Bruta
+# ABA 5 — Tabela de Resumo
 # ════════════════════════════════════════════════════════════════════════════
 with aba_tab:
     sub = st.radio("Tabela", ["Empreendimentos", "UTM"], horizontal=True)
-    df_tab = (
+
+    # CSV exporta os dados brutos (mais útil para análise externa)
+    df_raw = (
         ov.sort_values("date", ascending=False)
         if sub == "Empreendimentos"
         else (utm.sort_values("date", ascending=False) if not utm.empty else pd.DataFrame())
     )
-
     st.download_button(
         label="⬇️ Exportar CSV",
-        data=df_tab.to_csv(index=False).encode("utf-8"),
+        data=df_raw.to_csv(index=False).encode("utf-8"),
         file_name=f"ga4_buriti_{sub.lower()}_{dt_ini.date()}_{dt_fim.date()}.csv",
         mime="text/csv",
     )
-    tabela(df_tab)
+
+    st.divider()
+
+    if sub == "Empreendimentos":
+        if ov.empty:
+            st.info("Nenhum dado no período selecionado.")
+        else:
+            resumo_emp = (
+                ov.groupby("property_name", as_index=False).agg(
+                    sessions               = ("sessions",                "sum"),
+                    totalUsers             = ("totalUsers",              "sum"),
+                    screenPageViews        = ("screenPageViews",         "sum"),
+                    bounceRate             = ("bounceRate",              "mean"),
+                    engagementRate         = ("engagementRate",          "mean"),
+                    averageSessionDuration = ("averageSessionDuration",  "mean"),
+                )
+            )
+            resumo_emp["nome"] = resumo_emp["property_name"].map(_nome_curto)
+            tabela_resumo(
+                resumo_emp,
+                titulo="Resumo por Empreendimento — período selecionado",
+                col_nome="nome",
+                col_nome_label="Empreendimento",
+                metricas=[
+                    {"col": "sessions",               "label": "Sessões",       "fmt": lambda v: _br(v),                              "agg": "sum"},
+                    {"col": "totalUsers",             "label": "Usuários",      "fmt": lambda v: _br(v),                              "agg": "sum"},
+                    {"col": "screenPageViews",        "label": "Pageviews",     "fmt": lambda v: _br(v),                              "agg": "sum"},
+                    {"col": "bounceRate",             "label": "Tx. Rejeição",  "fmt": lambda v: f"{v:.1%}".replace(".", ","),        "agg": "mean", "cls": "pct"},
+                    {"col": "engagementRate",         "label": "Tx. Engaj.",    "fmt": lambda v: f"{v:.1%}".replace(".", ","),        "agg": "mean", "cls": "pct"},
+                    {"col": "averageSessionDuration", "label": "Duração Média", "fmt": lambda v: f"{v:.0f}s",                        "agg": "mean", "cls": "pct"},
+                ],
+            )
+
+    else:  # UTM
+        if utm.empty:
+            st.info("Nenhum dado de UTM no período selecionado.")
+        else:
+            resumo_utm = (
+                _sub(_sub(_sub(utm, "canal"), "sessionSource"), "sessionMedium")
+                .groupby(["canal", "sessionSource", "sessionMedium"], as_index=False)
+                .agg(sessions=("sessions", "sum"))
+                .sort_values("sessions", ascending=False)
+            )
+            resumo_utm["label"] = (
+                resumo_utm["canal"] + "  ·  "
+                + resumo_utm["sessionSource"] + " / "
+                + resumo_utm["sessionMedium"]
+            )
+            tabela_resumo(
+                resumo_utm,
+                titulo="Resumo por Canal / Source / Medium — período selecionado",
+                col_nome="label",
+                col_nome_label="Canal · Source / Medium",
+                metricas=[
+                    {"col": "sessions", "label": "Sessões", "fmt": lambda v: _br(v), "agg": "sum"},
+                ],
+            )
