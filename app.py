@@ -78,8 +78,8 @@ st.sidebar.header("Filtros")
 
 nomes        = sorted(df_ov_emp["property_name"].dropna().unique())
 nomes_curtos = {n: _nome_curto(n) for n in nomes}
-opcoes       = ["Todos"] + [nomes_curtos[n] for n in nomes]
-sel_nome     = st.sidebar.selectbox("Empreendimento", opcoes)
+opcoes_emp   = [nomes_curtos[n] for n in nomes]
+sel_nomes    = st.sidebar.multiselect("Empreendimento", opcoes_emp, placeholder="Todos")
 
 min_date = df_ov_emp["date"].min()
 max_date = df_ov_emp["date"].max()
@@ -98,19 +98,28 @@ dt_ini, dt_fim = (
 # ── Aplicar filtros ───────────────────────────────────────────────────────────
 
 ov = df_ov_emp[(df_ov_emp["date"] >= dt_ini) & (df_ov_emp["date"] <= dt_fim)].copy()
-if sel_nome != "Todos":
-    full_name = next((k for k, v in nomes_curtos.items() if v == sel_nome), None)
-    if full_name:
-        ov = ov[ov["property_name"] == full_name]
+if sel_nomes:
+    full_names = [k for k, v in nomes_curtos.items() if v in sel_nomes]
+    ov = ov[ov["property_name"].isin(full_names)]
 else:
-    full_name = None
+    full_names = []
 
 utm = (
     df_utm_emp[(df_utm_emp["date"] >= dt_ini) & (df_utm_emp["date"] <= dt_fim)].copy()
     if not df_utm_emp.empty else pd.DataFrame()
 )
-if full_name and not utm.empty:
-    utm = utm[utm["property_name"] == full_name]
+if full_names and not utm.empty:
+    utm = utm[utm["property_name"].isin(full_names)]
+
+_RUIDO = {"(not set)", "(none)", "(data not available)", "data not available",
+          "not set", "", "nan", "(not provided)"}
+
+def _limpo(v: str) -> bool:
+    return str(v).strip().lower() not in _RUIDO
+
+def _sr(df: pd.DataFrame, col: str) -> pd.DataFrame:
+    """Remove linhas com valor de ruído na coluna especificada."""
+    return df[df[col].apply(_limpo)]
 
 # ── Abas ──────────────────────────────────────────────────────────────────────
 
@@ -167,71 +176,59 @@ with aba_ov:
 # ABA 2 — UTM: Canais
 # ════════════════════════════════════════════════════════════════════════════
 
-_RUIDO = {"(not set)", "(none)", "(data not available)", "data not available",
-          "not set", "", "nan"}
-
-def _limpo(v: str) -> bool:
-    return str(v).strip().lower() not in _RUIDO
-
 with aba_utm:
     if utm.empty:
         st.info("Nenhum dado de UTM no período selecionado.")
     else:
-        # ── Filtros rápidos ──────────────────────────────────────────────
-        cf1, cf2 = st.columns(2)
-        with cf1:
-            canal_opts = ["Todos"] + sorted(utm["canal"].dropna().unique().tolist())
-            sel_canal = st.selectbox("Canal", canal_opts, key="utm_canal")
-        with cf2:
-            src_med_vals = sorted({
-                f"{r['sessionSource']} / {r['sessionMedium']}"
-                for _, r in utm.iterrows()
-                if _limpo(r["sessionSource"]) and _limpo(r["sessionMedium"])
-            })
-            sel_src_med = st.selectbox("Source / Medium", ["Todos"] + src_med_vals, key="utm_src_med")
+        # ── Filtros ──────────────────────────────────────────────────────────
+        fc1, fc2 = st.columns(2)
+        with fc1:
+            canal_opts = sorted(utm["canal"].dropna().unique().tolist())
+            sel_canais = st.multiselect("Canal", canal_opts, placeholder="Todos", key="utm_canal")
+        with fc2:
+            utm_clean    = utm[utm["sessionSource"].apply(_limpo) & utm["sessionMedium"].apply(_limpo)]
+            src_med_vals = sorted(
+                (utm_clean["sessionSource"] + " / " + utm_clean["sessionMedium"]).unique().tolist()
+            )
+            sel_src_meds = st.multiselect("Source / Medium", src_med_vals, placeholder="Todos", key="utm_src_med")
 
         utm_f = utm.copy()
-        if sel_canal != "Todos":
-            utm_f = utm_f[utm_f["canal"] == sel_canal]
-        if sel_src_med != "Todos":
-            s, m = sel_src_med.split(" / ", 1)
-            utm_f = utm_f[(utm_f["sessionSource"] == s) & (utm_f["sessionMedium"] == m)]
+        if sel_canais:
+            utm_f = utm_f[utm_f["canal"].isin(sel_canais)]
+        if sel_src_meds:
+            pairs = [v.split(" / ", 1) for v in sel_src_meds]
+            mask  = pd.Series(False, index=utm_f.index)
+            for s, m in pairs:
+                mask |= (utm_f["sessionSource"] == s) & (utm_f["sessionMedium"] == m)
+            utm_f = utm_f[mask]
 
         st.divider()
-        col1, col2 = st.columns(2)
-        with col1:
-            canal_df = utm_f.groupby("canal", as_index=False)["sessions"].sum()
-            grafico_barras_h_card(canal_df, "sessions", "canal", "Distribuição por Canal")
-        with col2:
-            monthly_canal = utm_f.groupby(["month", "canal"], as_index=False)["sessions"].sum()
-            grafico_barras_mensais(
-                monthly_canal, "month", "sessions",
-                "Sessões por mês — por canal",
-                color="canal", color_map=CANAL_COLORS,
-            )
+        canal_df = utm_f.groupby("canal", as_index=False)["sessions"].sum()
+        grafico_barras_h_card(canal_df, "sessions", "canal", "Distribuição por Canal")
 
         st.divider()
         col3, col4 = st.columns(2)
         with col3:
-            src = utm_f.groupby("sessionSource", as_index=False)["sessions"].sum()
+            src = _sr(utm_f, "sessionSource").groupby("sessionSource", as_index=False)["sessions"].sum()
             grafico_barras_h_card(src, "sessions", "sessionSource", "Source (utm_source)")
         with col4:
-            med = utm_f.groupby("sessionMedium", as_index=False)["sessions"].sum()
+            med = _sr(utm_f, "sessionMedium").groupby("sessionMedium", as_index=False)["sessions"].sum()
             grafico_barras_h_card(med, "sessions", "sessionMedium", "Medium (utm_medium)")
 
         st.divider()
         col5, col6 = st.columns(2)
         with col5:
-            camp = utm_f.groupby("sessionCampaignName", as_index=False)["sessions"].sum()
+            camp = _sr(utm_f, "sessionCampaignName").groupby("sessionCampaignName", as_index=False)["sessions"].sum()
             grafico_barras_h_card(camp, "sessions", "sessionCampaignName", "Campaign (utm_campaign)")
         with col6:
-            cont = utm_f.groupby("sessionManualAdContent", as_index=False)["sessions"].sum()
+            cont = _sr(utm_f, "sessionManualAdContent").groupby("sessionManualAdContent", as_index=False)["sessions"].sum()
             grafico_barras_h_card(cont, "sessions", "sessionManualAdContent", "Content (utm_content)")
 
         st.divider()
         st.subheader("Source × Medium")
         src_med_df = (
-            utm_f.groupby(["sessionSource", "sessionMedium"], as_index=False)["sessions"].sum()
+            _sr(_sr(utm_f, "sessionSource"), "sessionMedium")
+            .groupby(["sessionSource", "sessionMedium"], as_index=False)["sessions"].sum()
             .assign(canal_label=lambda d: d["sessionSource"] + " / " + d["sessionMedium"])
         )
         grafico_barras_h_card(src_med_df, "sessions", "canal_label", "Top combinações source / medium", top_n=20)
@@ -264,7 +261,7 @@ with aba_lp:
                 grafico_barras_h_card(canal_lp, "sessions", "canal", "Canal")
             with col2:
                 src_lp = utm_lp.groupby("sessionSource", as_index=False)["sessions"].sum()
-                grafico_rosca(src_lp, "sessionSource", "sessions", "Source")
+                grafico_barras_h_card(src_lp, "sessions", "sessionSource", "Source")
 
             camp_lp = utm_lp.groupby("sessionCampaignName", as_index=False)["sessions"].sum()
             grafico_barras_h_card(camp_lp, "sessions", "sessionCampaignName", "Campaigns nesta Landing Page")
@@ -302,12 +299,8 @@ with aba_inst:
 
         col1, col2 = st.columns(2)
         with col1:
-            monthly_inst = ov_inst_m.groupby(["month", "nome"], as_index=False)["sessions"].sum()
-            grafico_barras_mensais(
-                monthly_inst, "month", "sessions",
-                "Sessões por mês — por site",
-                color="nome",
-            )
+            monthly_inst = ov_inst_m.groupby("month", as_index=False)["sessions"].sum()
+            grafico_barras_mensais(monthly_inst, "month", "sessions", "Sessões por mês")
         with col2:
             if not utm_inst.empty:
                 canal_inst = utm_inst.groupby("canal", as_index=False)["sessions"].sum()
