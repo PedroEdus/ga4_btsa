@@ -162,47 +162,101 @@ def _audit(bq: bigquery.Client, rows_ov: int, rows_utm: int, status: str) -> Non
     bq.load_table_from_dataframe(audit, TABLE_AUDIT, job_config=job_config).result()
 
 
+# ── Detecção de dias pendentes ────────────────────────────────────────────────
+
+def _ultima_data_bq(bq: bigquery.Client) -> date | None:
+    """Retorna a última data carregada em ga4_overview_raw, ou None se vazia."""
+    try:
+        query = f"""
+            SELECT MAX(PARSE_DATE('%Y%m%d', date)) AS max_date
+            FROM `{TABLE_OVERVIEW}`
+        """
+        row = list(bq.query(query).result())[0]
+        return row.max_date  # datetime.date ou None
+    except Exception:
+        return None
+
+
+def _datas_pendentes(bq: bigquery.Client) -> list[str]:
+    """
+    Compara última data no BQ com ontem.
+    Retorna lista de datas faltantes no formato YYYY-MM-DD.
+    Se a tabela estiver vazia, retorna apenas ontem.
+    """
+    yesterday = date.today() - timedelta(days=1)
+    ultima = _ultima_data_bq(bq)
+
+    if ultima is None:
+        print("  Tabela vazia — extraindo apenas ontem.")
+        return [yesterday.strftime("%Y-%m-%d")]
+
+    if ultima >= yesterday:
+        print(f"  Dados já atualizados até {ultima}. Nada a fazer.")
+        return []
+
+    pendentes = []
+    atual = ultima + timedelta(days=1)
+    while atual <= yesterday:
+        pendentes.append(atual.strftime("%Y-%m-%d"))
+        atual += timedelta(days=1)
+
+    print(f"  Lacuna detectada: {ultima} → {yesterday} ({len(pendentes)} dia(s) pendente(s)).")
+    return pendentes
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    target_date = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
-    print(f"Extraindo GA4 para {target_date} ...")
+    bq = bigquery.Client(project=PROJECT_ID)
+
+    print("Verificando dias pendentes no BigQuery...")
+    datas = _datas_pendentes(bq)
+
+    if not datas:
+        return
 
     creds = _load_creds()
     property_names = _get_property_names(creds)
     print(f"{len(property_names)} properties encontradas.\n")
 
-    bq = bigquery.Client(project=PROJECT_ID)
-    all_overview, all_utm = [], []
+    total_ov = total_utm = 0
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {
-            pool.submit(_extract_property, pid, name, creds, target_date): pid
-            for pid, name in property_names.items()
-        }
-        for i, future in enumerate(as_completed(futures), 1):
-            pid = futures[future]
-            try:
-                ov, utm = future.result()
-                if not ov.empty:
-                    all_overview.append(ov)
-                if not utm.empty:
-                    all_utm.append(utm)
-                print(f"  [{i}/{len(futures)}] {pid}")
-            except Exception as exc:
-                print(f"  [ERRO] {pid} — {exc}")
+    for target_date in datas:
+        print(f"\n── Extraindo {target_date} ({datas.index(target_date)+1}/{len(datas)}) ──")
+        all_overview, all_utm = [], []
 
-    df_ov  = pd.concat(all_overview, ignore_index=True) if all_overview else pd.DataFrame()
-    df_utm = pd.concat(all_utm,      ignore_index=True) if all_utm      else pd.DataFrame()
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            futures = {
+                pool.submit(_extract_property, pid, name, creds, target_date): pid
+                for pid, name in property_names.items()
+            }
+            for i, future in enumerate(as_completed(futures), 1):
+                pid = futures[future]
+                try:
+                    ov, utm = future.result()
+                    if not ov.empty:
+                        all_overview.append(ov)
+                    if not utm.empty:
+                        all_utm.append(utm)
+                    print(f"  [{i}/{len(futures)}] {pid}")
+                except Exception as exc:
+                    print(f"  [ERRO] {pid} — {exc}")
 
-    try:
-        rows_ov  = _load_to_bq(df_ov,  TABLE_OVERVIEW, bq)
-        rows_utm = _load_to_bq(df_utm, TABLE_UTM,      bq)
-        _audit(bq, rows_ov, rows_utm, "OK")
-        print(f"\n[OK] overview={rows_ov} linhas | utm={rows_utm} linhas")
-    except Exception as exc:
-        _audit(bq, 0, 0, f"ERRO: {exc}")
-        raise
+        df_ov  = pd.concat(all_overview, ignore_index=True) if all_overview else pd.DataFrame()
+        df_utm = pd.concat(all_utm,      ignore_index=True) if all_utm      else pd.DataFrame()
+
+        try:
+            rows_ov  = _load_to_bq(df_ov,  TABLE_OVERVIEW, bq)
+            rows_utm = _load_to_bq(df_utm, TABLE_UTM,      bq)
+            total_ov  += rows_ov
+            total_utm += rows_utm
+            print(f"  [OK] {target_date}: overview={rows_ov} | utm={rows_utm}")
+        except Exception as exc:
+            _audit(bq, total_ov, total_utm, f"ERRO em {target_date}: {exc}")
+            raise
+
+    _audit(bq, total_ov, total_utm, "OK")
+    print(f"\n[CONCLUÍDO] {len(datas)} dia(s) | overview={total_ov} | utm={total_utm}")
 
 
 if __name__ == "__main__":
