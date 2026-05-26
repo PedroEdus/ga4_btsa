@@ -169,17 +169,36 @@ def grafico_barras_mensais(
     if color_map:
         kwargs["color_discrete_map"] = color_map
     fig = px.bar(df, **kwargs)
+
+    # Extende eixo Y 20% acima do máximo para os labels não cortarem
+    if not color:
+        y_max = float(df[y].max()) if not df.empty else 1
+        y_range = [0, y_max * 1.22]
+    else:
+        y_range = None
+
     fig.update_layout(
         template=_tema(),
-        height=360,
-        margin=dict(l=20, r=20, t=50, b=20),
+        height=400,
+        margin=dict(l=20, r=20, t=40, b=20),
         xaxis=dict(title=None, type="category"),
-        yaxis=dict(title=None),
-        legend=dict(orientation="h", y=-0.25, title=None),
-        bargap=0.25,
+        yaxis=dict(title=None, gridcolor="#2a2a2a", range=y_range),
+        legend=dict(orientation="h", y=-0.22, title=None),
+        bargap=0.28,
+        plot_bgcolor="#1c1c1c",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Manrope, sans-serif", color="#ffffff"),
+        title=dict(font=dict(family="Manrope, sans-serif", size=15, color="#ffffff"), x=0, xanchor="left", pad=dict(l=4)),
     )
     if not color:
-        fig.update_traces(marker_color="#008140")
+        fig.update_traces(
+            marker_color="#008140",
+            text=df[y],
+            texttemplate="%{text:,.0f}",
+            textposition="outside",
+            textfont=dict(size=11, color="rgba(255,255,255,0.75)"),
+            cliponaxis=False,
+        )
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -241,6 +260,8 @@ def grafico_rosca(
         height=360,
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", y=-0.2, title=None),
+        font=dict(family="Manrope, sans-serif", color="#ffffff"),
+        title=dict(font=dict(family="Manrope, sans-serif", size=15, color="#ffffff"), x=0, xanchor="left", pad=dict(l=4)),
     )
     st.plotly_chart(fig, use_container_width=True)
 

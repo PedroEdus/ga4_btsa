@@ -125,7 +125,7 @@ def _sr(df: pd.DataFrame, col: str) -> pd.DataFrame:
 
 aba_inst, aba_ov, aba_utm, aba_lp, aba_tab = st.tabs([
     "🏛️ Sites Institucionais",
-    "📈 Overview",
+    "🏢 Empreendimentos",
     "🔗 UTM — Canais",
     "🏠 Landing Pages",
     "📋 Tabela",
@@ -181,7 +181,7 @@ with aba_utm:
         st.info("Nenhum dado de UTM no período selecionado.")
     else:
         # ── Filtros ──────────────────────────────────────────────────────────
-        fc1, fc2 = st.columns(2)
+        fc1, fc2, fc3, fc4 = st.columns(4)
         with fc1:
             canal_opts = sorted(utm["canal"].dropna().unique().tolist())
             sel_canais = st.multiselect("Canal", canal_opts, placeholder="Todos", key="utm_canal")
@@ -191,6 +191,12 @@ with aba_utm:
                 (utm_clean["sessionSource"] + " / " + utm_clean["sessionMedium"]).unique().tolist()
             )
             sel_src_meds = st.multiselect("Source / Medium", src_med_vals, placeholder="Todos", key="utm_src_med")
+        with fc3:
+            camp_opts  = sorted(_sr(utm, "sessionCampaignName")["sessionCampaignName"].dropna().unique().tolist())
+            sel_camps  = st.multiselect("Campaign (utm_campaign)", camp_opts, placeholder="Todos", key="utm_camp")
+        with fc4:
+            cont_opts  = sorted(_sr(utm, "sessionManualAdContent")["sessionManualAdContent"].dropna().unique().tolist())
+            sel_conts  = st.multiselect("Content (utm_content)", cont_opts, placeholder="Todos", key="utm_cont")
 
         utm_f = utm.copy()
         if sel_canais:
@@ -201,6 +207,10 @@ with aba_utm:
             for s, m in pairs:
                 mask |= (utm_f["sessionSource"] == s) & (utm_f["sessionMedium"] == m)
             utm_f = utm_f[mask]
+        if sel_camps:
+            utm_f = utm_f[utm_f["sessionCampaignName"].isin(sel_camps)]
+        if sel_conts:
+            utm_f = utm_f[utm_f["sessionManualAdContent"].isin(sel_conts)]
 
         st.divider()
         canal_df = utm_f.groupby("canal", as_index=False)["sessions"].sum()
@@ -321,8 +331,17 @@ with aba_inst:
 # ABA 5 — Tabela Bruta
 # ════════════════════════════════════════════════════════════════════════════
 with aba_tab:
-    sub = st.radio("Tabela", ["Overview", "UTM"], horizontal=True)
-    if sub == "Overview":
-        tabela(ov.sort_values("date", ascending=False))
-    else:
-        tabela(utm.sort_values("date", ascending=False) if not utm.empty else pd.DataFrame())
+    sub = st.radio("Tabela", ["Empreendimentos", "UTM"], horizontal=True)
+    df_tab = (
+        ov.sort_values("date", ascending=False)
+        if sub == "Empreendimentos"
+        else (utm.sort_values("date", ascending=False) if not utm.empty else pd.DataFrame())
+    )
+
+    st.download_button(
+        label="⬇️ Exportar CSV",
+        data=df_tab.to_csv(index=False).encode("utf-8"),
+        file_name=f"ga4_buriti_{sub.lower()}_{dt_ini.date()}_{dt_fim.date()}.csv",
+        mime="text/csv",
+    )
+    tabela(df_tab)

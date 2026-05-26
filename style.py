@@ -97,6 +97,15 @@ def aplicar_tema() -> None:
             font-weight: 500 !important;
         }
         [data-testid="stDataFrameResizable"] td { font-size: 13px !important; }
+        /* Plotly charts — quinas arredondadas */
+        [data-testid="stPlotlyChart"] {
+            border-radius: 8px !important;
+            overflow: hidden !important;
+            background: #1c1c1c !important;
+        }
+        [data-testid="stPlotlyChart"] > div {
+            border-radius: 8px !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
