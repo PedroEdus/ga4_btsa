@@ -21,10 +21,10 @@ jobs:
 
       - name: Restaurar credenciais GCP (BigQuery)
         env:
-          SECRET_B64: ${{ secrets.GCP_SA_KEY }}
+          SECRET_JSON: ${{ secrets.GCP_SA_KEY }}
         run: |
           mkdir -p keys
-          python3 -c "import base64,os; s=''.join(os.environ['SECRET_B64'].split()).rstrip('='); open('keys/ga4-buriti-sa.json','wb').write(base64.b64decode(s+'='*(-len(s)%4)))"
+          python3 -c "import os; open('keys/ga4-buriti-sa.json','w',encoding='utf-8').write(os.environ['SECRET_JSON'])"
           echo "GOOGLE_APPLICATION_CREDENTIALS=keys/ga4-buriti-sa.json" >> $GITHUB_ENV
 
       - name: Restaurar token OAuth GA4
