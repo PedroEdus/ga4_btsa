@@ -8,3 +8,4 @@ streamlit
 plotly
 python-dotenv
 pyarrow
+db-dtypes
