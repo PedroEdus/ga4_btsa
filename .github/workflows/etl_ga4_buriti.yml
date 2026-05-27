@@ -24,14 +24,14 @@ jobs:
           SECRET_B64: ${{ secrets.GCP_SA_KEY }}
         run: |
           mkdir -p keys
-          python3 -c "import base64,os; s=''.join(os.environ['SECRET_B64'].split()); open('keys/ga4-buriti-sa.json','wb').write(base64.b64decode(s+'='*(-len(s)%4)))"
+          python3 -c "import base64,os; s=''.join(os.environ['SECRET_B64'].split()).rstrip('='); open('keys/ga4-buriti-sa.json','wb').write(base64.b64decode(s+'='*(-len(s)%4)))"
           echo "GOOGLE_APPLICATION_CREDENTIALS=keys/ga4-buriti-sa.json" >> $GITHUB_ENV
 
       - name: Restaurar token OAuth GA4
         env:
           SECRET_B64: ${{ secrets.GA4_TOKEN_PKL }}
         run: |
-          python3 -c "import base64,os; s=''.join(os.environ['SECRET_B64'].split()); open('token.pkl','wb').write(base64.b64decode(s+'='*(-len(s)%4)))"
+          python3 -c "import base64,os; s=''.join(os.environ['SECRET_B64'].split()).rstrip('='); open('token.pkl','wb').write(base64.b64decode(s+'='*(-len(s)%4)))"
           echo "GA4_TOKEN_PATH=token.pkl" >> $GITHUB_ENV
 
       - name: Rodar ETL
