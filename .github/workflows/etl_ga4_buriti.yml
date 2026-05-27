@@ -22,12 +22,12 @@ jobs:
       - name: Restaurar credenciais GCP (BigQuery)
         run: |
           mkdir -p keys
-          echo "${{ secrets.GCP_SA_KEY }}" | base64 -d > keys/ga4-buriti-sa.json
+          echo "${{ secrets.GCP_SA_KEY }}" | tr -d '\n\r' | base64 -d > keys/ga4-buriti-sa.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=keys/ga4-buriti-sa.json" >> $GITHUB_ENV
 
       - name: Restaurar token OAuth GA4
         run: |
-          echo "${{ secrets.GA4_TOKEN_PKL }}" | base64 -d > token.pkl
+          echo "${{ secrets.GA4_TOKEN_PKL }}" | tr -d '\n\r' | base64 -d > token.pkl
           echo "GA4_TOKEN_PATH=token.pkl" >> $GITHUB_ENV
 
       - name: Rodar ETL
