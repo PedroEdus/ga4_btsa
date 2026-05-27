@@ -20,14 +20,18 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Restaurar credenciais GCP (BigQuery)
+        env:
+          SECRET_B64: ${{ secrets.GCP_SA_KEY }}
         run: |
           mkdir -p keys
-          echo "${{ secrets.GCP_SA_KEY }}" | tr -d '\n\r' | base64 -d > keys/ga4-buriti-sa.json
+          python3 -c "import base64,os; open('keys/ga4-buriti-sa.json','wb').write(base64.b64decode(''.join(os.environ['SECRET_B64'].split())))"
           echo "GOOGLE_APPLICATION_CREDENTIALS=keys/ga4-buriti-sa.json" >> $GITHUB_ENV
 
       - name: Restaurar token OAuth GA4
+        env:
+          SECRET_B64: ${{ secrets.GA4_TOKEN_PKL }}
         run: |
-          echo "${{ secrets.GA4_TOKEN_PKL }}" | tr -d '\n\r' | base64 -d > token.pkl
+          python3 -c "import base64,os; open('token.pkl','wb').write(base64.b64decode(''.join(os.environ['SECRET_B64'].split())))"
           echo "GA4_TOKEN_PATH=token.pkl" >> $GITHUB_ENV
 
       - name: Rodar ETL
